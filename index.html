@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="A visual countdown calendar with a fixed timeline bar.">
+  <link rel="manifest" href="manifest.json">
+  <style>
+* { box-sizing: border-box; }
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #171717;
+  background: #f7f7f5;
+  --ink: #202020;
+  --muted: #777;
+  --line: #d8d8d4;
+  --soft: #efefec;
+  --accent: #202020;
+  --white: #fff;
+}
+body { margin: 0; min-height: 100vh; background: #f7f7f5; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+.app-shell { width: min(980px, 100%); margin: 0 auto; padding: 24px 18px 60px; }
+.topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:18px; }
+.eyebrow { font-size: 10px; letter-spacing: .16em; font-weight: 800; color: var(--muted); }
+h1,h2 { margin: 3px 0 0; letter-spacing: -.035em; }
+h1 { font-size: clamp(28px, 6vw, 46px); }
+h2 { font-size: 25px; }
+.icon-button { border: 1px solid var(--line); background: var(--white); width:42px; height:42px; border-radius:50%; font-size:19px; }
+.now-card, .timeline-card, .deadline-card, .empty-state {
+  background: var(--white); border: 1px solid var(--line); border-radius: 18px;
+}
+.now-card { padding: 18px 20px; display:flex; justify-content:space-between; align-items:end; gap:20px; }
+.label { font-size: 10px; font-weight:800; letter-spacing:.14em; color:var(--muted); }
+.date { font-size: clamp(25px, 5vw, 38px); font-weight: 800; letter-spacing: -.03em; margin-top: 2px; }
+.time { font-variant-numeric: tabular-nums; font-size: 18px; margin-top: 1px; }
+.range-info { text-align:right; font-size:11px; color:var(--muted); }
+.range-info strong { display:block; color:var(--ink); margin-top:3px; }
+.timeline-card { margin-top:14px; padding:18px 18px 15px; overflow:hidden; }
+.timeline-title-row, .timeline-caption { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--muted); font-weight:800; letter-spacing:.1em; }
+.timeline { position:relative; height:78px; margin:14px 2px 8px; }
+.timeline-track {
+  position:absolute; left:0; right:0; top:20px; height:38px;
+  border:4px solid var(--ink); border-radius:999px; background:#fff;
+}
+.remaining-fill {
+  position:absolute; top:24px; height:30px; border-radius:999px;
+  background:linear-gradient(90deg, #ff0000 0%, #ff8c00 16%, #ffe600 32%, #22c55e 48%, #00bfff 64%, #4169e1 80%, #8b2be2 100%); pointer-events:none;
+  transition:left .5s linear, width .5s linear;
+}
+.today-marker {
+  position:absolute; top:11px; width:3px; height:56px; background:linear-gradient(90deg, #ff0000 0%, #ff8c00 16%, #ffe600 32%, #22c55e 48%, #00bfff 64%, #4169e1 80%, #8b2be2 100%);
+  transform:translateX(-50%); border-radius:2px; z-index:5;
+  transition:left .5s linear;
+}
+.today-label {
+  position:absolute; top:-3px; transform:translateX(-50%);
+  font-size:9px; font-weight:900; letter-spacing:.08em; z-index:7;
+  transition:left .5s linear; white-space:nowrap;
+}
+.deadline-layer { position:absolute; inset:0; z-index:6; }
+.deadline-tick { position:absolute; top:12px; width:2px; height:54px; background:#e00000; transform:translateX(-50%); }
+.deadline-dot { position:absolute; top:29px; width:12px; height:12px; background:#fff; border:3px solid #e00000; border-radius:50%; transform:translate(-50%,-50%); }
+.deadline-mini-label {
+  position:absolute; top:62px; transform:translateX(-50%); max-width:120px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; font-weight:700;
+}
+.timeline-caption { letter-spacing:0; font-size:9px; font-weight:600; }
+.caption-center { color:#aaa; text-align:center; }
+.priority-section { margin-top:28px; }
+.section-heading { display:flex; align-items:end; justify-content:space-between; gap:16px; }
+.hint { margin:8px 0 14px; color:var(--muted); font-size:12px; }
+.primary-button, .secondary-button {
+  border-radius:999px; padding:11px 16px; font-weight:800; border:1px solid var(--ink);
+}
+.primary-button { background:var(--ink); color:#fff; }
+.secondary-button { background:#fff; color:var(--ink); border-color:var(--line); }
+.deadline-list { display:flex; flex-direction:column; gap:9px; }
+.deadline-card { display:grid; grid-template-columns:32px 40px 1fr 34px; align-items:center; gap:7px; padding:13px 12px; touch-action:none; }
+.deadline-card.dragging { opacity:.55; }
+.drag-handle, .delete-button { border:0; background:transparent; color:#888; }
+.drag-handle { font-size:22px; }
+.priority-number { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; background:#202020; color:#fff; font-weight:900; font-size:13px; }
+.deadline-main { min-width:0; }
+.deadline-name { font-weight:800; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.deadline-meta { color:var(--muted); font-size:11px; margin-top:2px; }
+.countdown { margin-top:4px; font-variant-numeric:tabular-nums; font-weight:800; font-size:14px; }
+.empty-state { padding:28px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:5px; color:var(--muted); }
+.hidden { display:none !important; }
+
+dialog { border:0; padding:0; background:transparent; max-width:min(520px, calc(100vw - 28px)); width:100%; }
+dialog::backdrop { background:rgba(0,0,0,.42); backdrop-filter:blur(3px); }
+.dialog-card { background:#fff; border-radius:22px; padding:20px; box-shadow:0 24px 80px rgba(0,0,0,.2); }
+.dialog-header { display:flex; justify-content:space-between; align-items:start; margin-bottom:18px; }
+label { display:block; font-size:12px; font-weight:800; margin-bottom:13px; }
+input { width:100%; margin-top:6px; border:1px solid var(--line); border-radius:11px; padding:12px; background:#fafaf9; outline:none; }
+input:focus { border-color:#555; }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.form-note { color:var(--muted); font-size:11px; line-height:1.45; }
+.dialog-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:18px; }
+
+@media (max-width: 600px) {
+  .app-shell { padding:16px 12px 42px; }
+  .now-card { align-items:start; flex-direction:column; }
+  .range-info { text-align:left; }
+  .timeline-card { padding-left:10px; padding-right:10px; }
+  .caption-center { display:none; }
+  .deadline-mini-label { display:none; }
+  .section-heading { align-items:start; flex-direction:column; }
+  .primary-button { width:100%; }
+  .deadline-card { grid-template-columns:30px 34px 1fr 30px; padding:11px 8px; }
+}
+
+
+.zoom-panel{margin:12px 0 0;padding:12px 14px;background:#fafaf9;border:1px solid #e1e1dd;border-radius:14px}
+.zoom-row{display:flex;justify-content:space-between;align-items:center}
+.zoom-label{font-size:10px;letter-spacing:.12em;font-weight:800;color:#777}
+.zoom-row strong{font-size:12px}
+.zoom-slider{width:100%;margin:8px 0 0;accent-color:#202020}
+.zoom-hint{display:flex;justify-content:space-between;font-size:9px;color:#999}
+
+.timeline{touch-action:none;cursor:grab;user-select:none}
+.timeline.dragging{cursor:grabbing}
+.deadline-number{position:absolute;top:-1px;transform:translateX(-50%);font-size:10px;font-weight:900;color:#d60000;background:#fff;border:1px solid #d60000;border-radius:999px;padding:2px 5px;white-space:nowrap;z-index:9}
+.deadline-mini-label{color:#d60000;font-weight:900}
+
+.alert-status{display:inline-flex;margin-top:4px;font-size:13px;font-weight:900;align-items:center;gap:4px}
+.alert-status.active{color:#d60000}
+.deadline-row.alert-active{border:2px solid #d60000;box-shadow:0 0 0 3px rgba(214,0,0,.10)}
+.deadline-row.alert-active .priority-badge{background:#d60000}
+
+.install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:10000;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#202020;color:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);font-size:12px}
+.install-banner button{border:0;border-radius:9px;padding:8px 12px;font-weight:800}
+.install-banner #installButton{margin-left:auto}
+</style>
+  <title>Countdown Calendar</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f7f7f5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Countdown Calendar">
+
+</head>
+<body>
+
+<div id="installBanner" class="install-banner" hidden>
+  <span>Install Countdown Calendar on this phone</span>
+  <button id="installButton" type="button">Install</button>
+  <button id="installDismiss" type="button" aria-label="Dismiss">×</button>
+</div>
+
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">COUNTDOWN CALENDAR</div>
+        <h1>Time to go</h1>
+      </div>
+      <button id="settingsBtn" class="icon-button" aria-label="Timeline settings">⚙</button>
+    </header>
+
+    <section class="now-card">
+      <div>
+        <div class="label">TODAY / NOW</div>
+        <div id="todayDate" class="date">--/--/----</div>
+        <div id="todayTime" class="time">--:--:-- --</div>
+      </div>
+      <div class="range-info">
+        <span>Timeline start</span>
+        <strong id="rangeStartLabel">--/--/----</strong>
+      </div>
+    </section>
+
+    
+<div class="zoom-panel">
+  <div class="zoom-row">
+    <span class="zoom-label">TIMELINE ZOOM</span>
+    <strong id="zoomValue">1×</strong>
+  </div>
+  <input id="zoomSlider" class="zoom-slider" type="range" min="1" max="100000" value="1" step="1"
+         aria-label="Timeline zoom">
+  <div class="zoom-hint">
+    <span>Full timeline</span><span>Swipe bar ← →</span><span>Seconds</span>
+  </div>
+</div>
+<section class="timeline-card" aria-label="Countdown timeline">
+      <div class="timeline-title-row">
+        <span id="startLabel">START</span>
+        <span id="endLabel">END</span>
+      </div>
+      <div id="timeline" class="timeline">
+        <div class="timeline-track"></div>
+        <div id="deadlineLayer" class="deadline-layer"></div>
+        <div id="todayMarker" class="today-marker" aria-label="Today"></div>
+        <div id="todayLabel" class="today-label">TODAY</div>
+        <div id="remainingFill" class="remaining-fill"></div>
+      </div>
+      <div class="timeline-caption">
+        <span id="startCaption">Start</span>
+        <span class="caption-center">Today moves • rainbow = remaining time</span>
+        <span id="endCaption">Last priority deadline</span>
+      </div>
+    </section>
+
+    <section class="priority-section">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">UPCOMING</div>
+          <h2>Deadlines</h2>
+        </div>
+        <button id="addBtn" class="primary-button">＋ Add deadline</button>
+      </div>
+      <p class="hint">Drag the handles to change priority. The top deadline is priority 1.</p>
+      <div id="deadlineList" class="deadline-list"></div>
+      <div id="emptyState" class="empty-state hidden">
+        <strong>No deadlines yet.</strong>
+        <span>Add your first event to build the countdown bar.</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="deadlineDialog">
+    <form id="deadlineForm" method="dialog" class="dialog-card">
+      <div class="dialog-header">
+        <div>
+          <div class="eyebrow">NEW DEADLINE</div>
+          <h2>Add deadline</h2>
+        </div>
+        <button type="button" class="icon-button" data-close="deadlineDialog" aria-label="Close" title="Close" aria-label="Close" title="Close">×</button>
+      </div>
+
+      <label>
+        Event name
+        <input id="eventName" name="name" type="text" maxlength="80" placeholder="e.g. First unit test" required>
+      </label>
+
+      <div class="two-col">
+        <label>
+          Date
+          <input id="eventDate" name="date" type="date" required>
+        </label>
+        <label>
+          Time
+          <input id="eventTime" name="time" type="time" value="23:59" required>
+        </label>
+      </div>
+      <label>
+        Priority
+        <input id="eventPriority" name="priority" type="number" min="1" step="1" required>
+      </label>
+      <label>
+        Red alert time before deadline
+        <input id="eventAlert" name="alert" type="text" inputmode="numeric" placeholder="HH:MM:SS" value="00:30:00" pattern="\\d{2}:\\d{2}:\\d{2}" required>
+      </label>
+      <p class="form-note">Example: 00:30:00 = alert starts 30 minutes before the deadline.</p>
+      <p id="priorityHint" class="form-note"></p>
+
+      <p id="dateLimitText" class="form-note"></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="secondary-button" data-close="deadlineDialog">Cancel</button>
+        <button class="primary-button" type="submit">Save deadline</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" method="dialog" class="dialog-card">
+      <div class="dialog-header">
+        <div>
+          <div class="eyebrow">TIMELINE</div>
+          <h2>Bar settings</h2>
+        </div>
+        <button type="button" class="icon-button" data-close="settingsDialog" aria-label="Close" title="Close" aria-label="Close" title="Close">×</button>
+      </div>
+
+      <div class="two-col">
+        <label>
+          Left extreme / start date
+          <input id="rangeStart" type="date" required>
+        </label>
+        <label>
+          Start time
+          <input id="rangeStartTime" type="time" value="00:00" required>
+        </label>
+      </div>
+      <p class="form-note">The left edge is fixed to this date and time. The right edge is the lowest-priority deadline. Today/now moves along this fixed-length bar.</p>
+
+      <div class="dialog-actions">
+        <button type="button" class="secondary-button" data-close="settingsDialog">Cancel</button>
+        <button class="primary-button" type="submit">Save settings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="deadlineTemplate">
+    <article class="deadline-card">
+      <button class="drag-handle" type="button" aria-label="Drag to reorder">☷</button>
+      <div class="priority-number"></div>
+      <div class="deadline-main">
+        <div class="deadline-name"></div>
+        <div class="deadline-meta"></div>
+        <div class="countdown"></div>
+      </div>
+      <button class="delete-button" type="button" aria-label="Delete deadline" aria-label="Close" title="Close">×</button>
+    </article>
+  </template>
+
+  <script>
+const $ = (s) => document.querySelector(s);
+const STORAGE_KEY = "countdown-calendar-v1";
+
+const state = {
+  deadlines: [],
+  rangeStart: null
+};
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function todayLocal() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function dateKey(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function formatDate(d) {
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+function formatDateTime(ms) {
+  const d = new Date(ms);
+  let h = d.getHours();
+  const suffix = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${formatDate(d)} · ${pad(h)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${suffix}`;
+}
+function parseLocalDate(dateStr, timeStr="00:00") {
+  const [y,m,d] = dateStr.split("-").map(Number);
+  const [hh,mm] = timeStr.split(":").map(Number);
+  return new Date(y, m-1, d, hh, mm, 0, 0);
+}
+function daysBetween(a,b) {
+  return Math.round((b-a) / 86400000);
+}
+function countdownText(targetMs, nowMs=Date.now()) {
+  let diff = Math.max(0, targetMs - nowMs);
+  const days = Math.floor(diff / 86400000); diff %= 86400000;
+  const hours = Math.floor(diff / 3600000); diff %= 3600000;
+  const mins = Math.floor(diff / 60000); diff %= 60000;
+  const secs = Math.floor(diff / 1000);
+  return `${days} Days ${pad(hours)}:${pad(mins)}:${pad(secs)} to go`;
+}
+function uid() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    if (saved) {
+      state.deadlines = Array.isArray(saved.deadlines) ? saved.deadlines : [];
+      state.rangeStart = saved.rangeStart || dateKey(new Date(todayLocal().getTime() - 30*86400000));
+      state.rangeStartTime = saved.rangeStartTime || "00:00";
+      return;
+    }
+  } catch {}
+  state.rangeStart = dateKey(new Date(todayLocal().getTime() - 30*86400000));
+  state.rangeStartTime = "00:00";
+  state.deadlines = [
+    {id:uid(), name:"Start of school", date:"2026-08-16", time:"08:00"},
+    {id:uid(), name:"First unit test", date:"2026-12-12", time:"09:00"}
+  ].filter(x => parseLocalDate(x.date,x.time).getTime() > Date.now());
+  save();
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function renderClock() {
+  const now = new Date();
+  $("#todayDate").textContent = formatDate(now);
+  $("#todayTime").textContent = formatDateTime(now).split(" · ")[1];
+  renderTimeline();
+  renderListCountdowns();
+}
+
+let timelineZoom = 1;
+
+function zoomFactorToLabel(z) {
+  if (z < 10) return `${z.toFixed(1)}×`;
+  if (z < 1000) return `${Math.round(z)}×`;
+  if (z < 10000) return `${(z/1000).toFixed(1)}k×`;
+  return `${Math.round(z/1000)}k×`;
+}
+
+function visibleWindow(start, last, now, z) {
+  const full = Math.max(1, last - start);
+  // At 1x the whole configured timeline is visible.
+  // Higher zoom progressively narrows the visible time window around NOW.
+  const minWindow = 10 * 1000; // 10 seconds at maximum zoom.
+  const windowMs = Math.max(minWindow, full / z);
+  let left = now - windowMs * 0.30;
+  let right = now + windowMs * 0.70;
+  // When possible, keep the window within the configured timeline.
+  if (left < start) { right += start-left; left = start; }
+  if (right > last) { left -= right-last; right = last; }
+  left = Math.max(start, left);
+  right = Math.min(last, right);
+  if (right-left < minWindow) {
+    right = Math.min(last, left + minWindow);
+    left = Math.max(start, right - minWindow);
+  }
+  return {left, right};
+}
+
+
+let timelineOffsetMs = 0;
+let panStartX = 0;
+let panStartOffset = 0;
+let panning = false;
+
+function installTimelinePan() {
+  const el = $("#timeline");
+  if (el.dataset.panInstalled) return;
+  el.dataset.panInstalled = "1";
+  el.addEventListener("pointerdown", e => {
+    if (timelineZoom <= 1) return;
+    panning = true; panStartX=e.clientX; panStartOffset=timelineOffsetMs;
+    el.classList.add("dragging"); el.setPointerCapture?.(e.pointerId);
+  });
+  el.addEventListener("pointermove", e => {
+    if (!panning) return;
+    const start=parseLocalDate(state.rangeStart,"00:00").getTime();
+    const last=state.deadlines.length ? parseLocalDate(state.deadlines[state.deadlines.length-1].date,state.deadlines[state.deadlines.length-1].time).getTime() : start+365*86400000;
+    const full=Math.max(1,last-start), windowMs=Math.max(10000,full/timelineZoom);
+    const base=visibleWindow(start,last,Date.now(),timelineZoom).left;
+    const delta=-(e.clientX-panStartX)/Math.max(1,el.clientWidth)*windowMs;
+    const maxPan=Math.max(0,last-windowMs-base);
+    const minPan=start-base;
+    timelineOffsetMs=Math.min(maxPan,Math.max(minPan,panStartOffset+delta));
+    renderTimeline();
+  });
+  const stop=()=>{panning=false;el.classList.remove("dragging")};
+  el.addEventListener("pointerup",stop); el.addEventListener("pointercancel",stop);
+}
+function renderTimeline() {
+  installTimelinePan();
+  const timeline = $("#timeline");
+  const start = parseLocalDate(state.rangeStart, state.rangeStartTime || "00:00").getTime();
+  const last = state.deadlines.length
+    ? parseLocalDate(state.deadlines[state.deadlines.length-1].date, state.deadlines[state.deadlines.length-1].time).getTime()
+    : start + 365*86400000;
+  const now = Date.now();
+
+  const window = visibleWindow(start, last, now, timelineZoom);
+  const baseSpan = window.right - window.left;
+  const visibleStart = Math.max(start, Math.min(last-baseSpan, window.left + timelineOffsetMs));
+  const visibleEnd = visibleStart + baseSpan;
+  const visibleSpan = Math.max(1, visibleEnd - visibleStart);
+
+  let ratio = (now - visibleStart) / visibleSpan;
+  ratio = Math.min(1, Math.max(0, ratio));
+
+  $("#rangeStartLabel").textContent = formatDateTime(start);
+
+  $("#startLabel").textContent = formatDateTime(start);
+  $("#endLabel").textContent = state.deadlines.length
+    ? formatDate(new Date(last)) : "ADD DEADLINE";
+  $("#startCaption").textContent = formatDateTime(start);
+  $("#endCaption").textContent = timelineZoom > 1
+    ? formatDateTime(visibleEnd) : (state.deadlines.length ? `P${state.deadlines.length} · ${formatDate(new Date(last))}` : "Last priority deadline");
+
+  const pct = ratio * 100;
+  $("#todayMarker").style.left = `${pct}%`;
+  $("#todayLabel").style.left = `${pct}%`;
+  $("#remainingFill").style.left = `${pct}%`;
+  $("#remainingFill").style.width = `${100-pct}%`;
+
+  const layer = $("#deadlineLayer");
+  layer.innerHTML = "";
+  state.deadlines.forEach((item, index) => {
+    const t = parseLocalDate(item.date,item.time).getTime();
+    let p = (t - visibleStart) / visibleSpan;
+    p = Math.min(1, Math.max(0, p));
+    const tick = document.createElement("div");
+    tick.className = "deadline-tick";
+    tick.style.left = `${p*100}%`;
+    tick.title = `Priority ${index+1}: ${item.name}`;
+    const dot = document.createElement("div");
+    dot.className = "deadline-dot";
+    dot.style.left = `${p*100}%`;
+    const number = document.createElement("div");
+    number.className = "deadline-number";
+    number.style.left = `${p*100}%`;
+    number.textContent = `P${index+1}`;
+    const label = document.createElement("div");
+    label.className = "deadline-mini-label";
+    label.style.left = `${p*100}%`;
+    label.textContent = item.name;
+    layer.append(tick,dot,number,label);
+  });
+}
+function renderList() {
+  const list = $("#deadlineList");
+  list.innerHTML = "";
+  $("#emptyState").classList.toggle("hidden", state.deadlines.length !== 0);
+  state.deadlines.forEach((item,index) => {
+    const node = $("#deadlineTemplate").content.firstElementChild.cloneNode(true);
+    node.dataset.id = item.id;
+    node.querySelector(".priority-number").textContent = index+1;
+    node.querySelector(".deadline-name").textContent = item.name;
+    const target = parseLocalDate(item.date,item.time);
+    node.querySelector(".deadline-meta").textContent =
+      `${formatDate(target)} · ${format12(target)}`;
+    node.querySelector(".countdown").textContent = countdownText(target.getTime());
+    node.querySelector(".delete-button").addEventListener("click", () => {
+      state.deadlines = state.deadlines.filter(x => x.id !== item.id);
+      save(); renderAll();
+    });
+    list.appendChild(node);
+  });
+  enableDragReorder();
+}
+function format12(d) {
+  let h=d.getHours(); const suffix=h>=12?"PM":"AM"; h=h%12||12;
+  return `${pad(h)}:${pad(d.getMinutes())}`;
+}
+function renderListCountdowns() {
+  [...$("#deadlineList").children].forEach((node,i) => {
+    const item=state.deadlines[i];
+    if (item) node.querySelector(".countdown").textContent =
+      countdownText(parseLocalDate(item.date,item.time).getTime());
+  });
+}
+function enableDragReorder() {
+  const list = $("#deadlineList");
+  let dragged = null;
+  list.querySelectorAll(".deadline-card").forEach(card => {
+    card.draggable = true;
+    card.addEventListener("dragstart", e => {
+      dragged = card; card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => {
+      if (!dragged) return;
+      dragged.classList.remove("dragging");
+      const ids=[...list.children].map(x=>x.dataset.id);
+      state.deadlines.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
+      save(); renderAll(); dragged=null;
+    });
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      if (!dragged || dragged===card) return;
+      const rect=card.getBoundingClientRect();
+      const before=e.clientY < rect.top+rect.height/2;
+      list.insertBefore(dragged, before ? card : card.nextSibling);
+    });
+  });
+}
+
+function updateAlertStates() {
+  const now=Date.now();
+  document.querySelectorAll("[data-alert-id]").forEach(el => {
+    const id=el.getAttribute("data-alert-id");
+    const item=state.deadlines.find(d=>String(d.id)===id);
+    if(!item) return;
+    const target=parseLocalDate(item.date,item.time).getTime();
+    const seconds=Math.floor((target-now)/1000);
+    const alertSeconds=Number.isFinite(item.alertSeconds)?item.alertSeconds:1800;
+    const active=seconds>0 && seconds<=alertSeconds;
+    el.textContent=active ? `🔴 ALERT · ${formatHMS(seconds)}` : "";
+    el.classList.toggle("active",active);
+    const row=el.closest(".deadline-row");
+    if(row) row.classList.toggle("alert-active",active);
+  });
+}
+function renderAll() { renderList(); renderClock(); }
+
+function openDialog(id) { $(id).showModal(); }
+function closeDialogs() { document.querySelectorAll("dialog[open]").forEach(d=>d.close()); }
+
+$("#addBtn").addEventListener("click", () => {
+  const now = new Date();
+  $("#eventName").value="";
+  $("#eventPriority").value=String(state.deadlines.length + 1);
+  $("#eventAlert").value="00:30:00";
+  $("#eventDate").min=dateKey(todayLocal());
+  const max = new Date(todayLocal()); max.setFullYear(max.getFullYear()+100);
+  $("#eventDate").max=dateKey(max);
+  $("#eventDate").value=dateKey(new Date(now.getTime()+86400000));
+  $("#dateLimitText").textContent=`Dates available: ${formatDate(todayLocal())} through ${formatDate(max)}.`;
+  $("#priorityHint").textContent=`Enter 1 for highest priority. Existing priorities at or below this number will move down.`;
+  openDialog("#deadlineDialog");
+});
+$("#deadlineForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const name=$("#eventName").value.trim();
+  const date=$("#eventDate").value;
+  const time=$("#eventTime").value;
+  const requestedPriority=Math.max(1, Math.min(state.deadlines.length + 1, parseInt($("#eventPriority").value || "1",10)));
+  const alertText=$("#eventAlert").value.trim();
+  const alertSeconds=parseHMS(alertText);
+  if (!name || !date || !time || alertSeconds===null) {
+    alert("Enter the red alert time as HH:MM:SS (for example 00:30:00).");
+    return;
+  }
+  const target=parseLocalDate(date,time).getTime();
+  const max=new Date(todayLocal()); max.setFullYear(max.getFullYear()+100);
+  if (target<=Date.now() || target>max.getTime()) {
+    alert("Choose a future date within 100 years from today.");
+    return;
+  }
+  const newDeadline={id:uid(),name,date,time,alertSeconds};
+  state.deadlines.splice(requestedPriority - 1, 0, newDeadline);
+  save(); closeDialogs(); renderAll();
+});
+$("#settingsBtn").addEventListener("click", () => {
+  const today=todayLocal();
+  const max=new Date(today); max.setFullYear(max.getFullYear()+100);
+  $("#rangeStart").min="1900-01-01";
+  $("#rangeStart").max=dateKey(today);
+  const startDate = parseLocalDate(state.rangeStart, "00:00");
+  $("#rangeStart").value=dateKey(startDate);
+  $("#rangeStartTime").value=`${pad(startDate.getHours())}:${pad(startDate.getMinutes())}`;
+  openDialog("#settingsDialog");
+});
+$("#settingsForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const chosen=$("#rangeStart").value;
+  const chosenTime=$("#rangeStartTime").value || "00:00";
+  if (!chosen) return;
+  const chosenMs=parseLocalDate(chosen, chosenTime).getTime();
+  const last = state.deadlines.length
+    ? parseLocalDate(state.deadlines[state.deadlines.length-1].date,state.deadlines[state.deadlines.length-1].time).getTime()
+    : Infinity;
+  if (chosenMs >= last) {
+    alert("The timeline start must be before the last-priority deadline.");
+    return;
+  }
+  state.rangeStart=chosen;
+  state.rangeStartTime=chosenTime;
+  save(); closeDialogs(); renderAll();
+});
+document.querySelectorAll("[data-close]").forEach(btn => btn.addEventListener("click",()=>$(btn.dataset.close).close()));
+
+
+$("#zoomSlider").addEventListener("input", (e) => {
+  timelineZoom = Number(e.target.value);
+  timelineOffsetMs = 0;
+  $("#zoomValue").textContent = zoomFactorToLabel(timelineZoom);
+  renderTimeline();
+});
+
+load();
+renderAll();
+setInterval(renderClock, 1000);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+
+
+// Robust dialog close/cancel handling.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-close], .dialog-close, .modal-close, .close-dialog, [data-cancel]");
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const dialog = button.closest("dialog, .dialog, .modal, [role='dialog']");
+  if (dialog) {
+    if (typeof closeDialogs === "function") closeDialogs();
+    else {
+      dialog.close?.();
+      dialog.classList.remove("open","show","visible");
+      dialog.style.display = "none";
+    }
+  }
+}, true);
+
+// Escape key closes any open dialog.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  if (typeof closeDialogs === "function") closeDialogs();
+});
+
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
+}
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  const b=document.getElementById("installBanner");
+  if(b) b.hidden=false;
+});
+document.getElementById("installButton")?.addEventListener("click", async () => {
+  if(!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  document.getElementById("installBanner").hidden=true;
+});
+document.getElementById("installDismiss")?.addEventListener("click", () => {
+  document.getElementById("installBanner").hidden=true;
+});
+</script>
+
+</body>
+</html>
