@@ -1,24 +1,16 @@
-# Countdown Calendar PWA
+# Countdown Calendar — Final PWA
 
-This is a Progressive Web App version.
+Upload the contents of this folder to the root of your public GitHub Pages repository.
 
-IMPORTANT: A PWA cannot be installed from a `file://` URL. It must be served over HTTPS (localhost is also allowed for testing).
+Files:
+- index.html
+- manifest.webmanifest
+- sw.js
+- icons/icon-192.png
+- icons/icon-512.png
 
-## Quick local test
+Open the HTTPS GitHub Pages URL in Chrome on Android. Chrome can then offer Install app / Add to Home screen.
 
-Python:
-```bash
-python3 -m http.server 8080
-```
-Then open:
-http://localhost:8080/
+Features include the fixed time-axis bar, rainbow remaining region, red deadline markers and priority labels, zoom and swipe scrolling, exact timeline start date/time, per-deadline red alert zones, local storage, and JSON backup/restore.
 
-For installation on an Android phone, deploy this folder to any HTTPS static web host. Open the HTTPS URL in Chrome and choose Install app / Add to Home screen.
-
-## Files
-
-- index.html — complete app
-- manifest.webmanifest — installation metadata
-- sw.js — offline caching/service worker
-
-The app stores deadlines locally in the browser/device.
+Deadline data is stored locally in the browser/device. Export a backup before clearing browser data or changing devices.

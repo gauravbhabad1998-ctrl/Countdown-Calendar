@@ -131,24 +131,26 @@ input:focus { border-color:#555; }
 .deadline-row.alert-active{border:2px solid #d60000;box-shadow:0 0 0 3px rgba(214,0,0,.10)}
 .deadline-row.alert-active .priority-badge{background:#d60000}
 
+.backup-panel{margin-top:12px;padding:12px 14px;background:#fff;border:1px solid #d8d8d4;border-radius:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.backup-title{font-size:10px;font-weight:900;letter-spacing:.14em;color:#777;margin-right:auto}
+.backup-panel .secondary-button{padding:8px 12px;font-size:11px}
 .install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:10000;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#202020;color:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);font-size:12px}
 .install-banner button{border:0;border-radius:9px;padding:8px 12px;font-weight:800}
 .install-banner #installButton{margin-left:auto}
 </style>
   <title>Countdown Calendar</title>
-
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#f7f7f5">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="theme-color" content="#202020">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Countdown Calendar">
-
 </head>
 <body>
-
 <div id="installBanner" class="install-banner" hidden>
-  <span>Install Countdown Calendar on this phone</span>
+  <span>Install Countdown Calendar</span>
   <button id="installButton" type="button">Install</button>
   <button id="installDismiss" type="button" aria-label="Dismiss">×</button>
 </div>
@@ -205,7 +207,14 @@ input:focus { border-color:#555; }
       </div>
     </section>
 
-    <section class="priority-section">
+    
+<div class="backup-panel">
+  <div class="backup-title">BACKUP</div>
+  <button id="exportBackupBtn" class="secondary-button" type="button">Export backup</button>
+  <button id="importBackupBtn" class="secondary-button" type="button">Import backup</button>
+  <input id="backupFileInput" type="file" accept="application/json,.json" hidden>
+</div>
+<section class="priority-section">
       <div class="section-heading">
         <div>
           <div class="eyebrow">UPCOMING</div>
@@ -686,30 +695,90 @@ document.addEventListener("keydown", (event) => {
   if (typeof closeDialogs === "function") closeDialogs();
 });
 
-</script>
 
-<script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
+// Backup / restore
+function exportBackup() {
+  const payload = {
+    app: "Countdown Calendar",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      deadlines: state.deadlines,
+      rangeStart: state.rangeStart,
+      rangeStartTime: state.rangeStartTime || "00:00"
+    }
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g,"-");
+  a.href=url;
+  a.download=`countdown-calendar-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
-let deferredInstallPrompt = null;
-window.addEventListener("beforeinstallprompt", (event) => {
-  event.preventDefault();
-  deferredInstallPrompt = event;
+function importBackupFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const payload = JSON.parse(reader.result);
+      const d = payload?.data;
+      if (!d || !Array.isArray(d.deadlines) || typeof d.rangeStart !== "string") throw new Error("Invalid backup");
+      const cleaned = d.deadlines.map((x, i) => ({
+        id: String(x.id || `${Date.now()}-${i}`),
+        name: String(x.name || "Untitled deadline").slice(0,80),
+        date: String(x.date),
+        time: String(x.time || "23:59"),
+        alertSeconds: Number.isFinite(Number(x.alertSeconds)) ? Number(x.alertSeconds) : 1800
+      }));
+      for (const x of cleaned) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(x.date) || !/^\d{2}:\d{2}$/.test(x.time)) throw new Error("Invalid deadline date/time");
+        if (parseLocalDate(x.date,x.time).getTime() <= 0) throw new Error("Invalid deadline");
+      }
+      state.deadlines = cleaned;
+      state.rangeStart = d.rangeStart;
+      state.rangeStartTime = d.rangeStartTime || "00:00";
+      save();
+      renderAll();
+      alert("Backup restored successfully.");
+    } catch (err) {
+      alert("This backup file is invalid or incompatible.");
+    }
+  };
+  reader.readAsText(file);
+}
+document.getElementById("exportBackupBtn")?.addEventListener("click", exportBackup);
+document.getElementById("importBackupBtn")?.addEventListener("click", () => document.getElementById("backupFileInput")?.click());
+document.getElementById("backupFileInput")?.addEventListener("change", e => {
+  const file=e.target.files?.[0];
+  if(file) importBackupFile(file);
+  e.target.value="";
+});
+
+// PWA installation
+let deferredInstallPrompt=null;
+window.addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
   const b=document.getElementById("installBanner");
   if(b) b.hidden=false;
 });
-document.getElementById("installButton")?.addEventListener("click", async () => {
+document.getElementById("installButton")?.addEventListener("click", async()=>{
   if(!deferredInstallPrompt) return;
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt=null;
   document.getElementById("installBanner").hidden=true;
 });
-document.getElementById("installDismiss")?.addEventListener("click", () => {
+document.getElementById("installDismiss")?.addEventListener("click",()=>{
   document.getElementById("installBanner").hidden=true;
 });
-</script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(console.error);
+  });
+}
 
+</script>
 </body>
 </html>
